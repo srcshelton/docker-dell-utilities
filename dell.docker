@@ -1,0 +1,103 @@
+#! /bin/sh
+
+set -eu
+
+cd "$( dirname "$( readlink -e "${0}" )" )" || exit 1
+
+DISTRO='ubuntu'
+arg=''
+
+[ -d dell ]
+
+if echo " ${*:-} " | grep -Eq -- ' -(h|-help) '; then
+	echo >&2 "Usage: $( basename "${0}" ) [dsu|ism]"
+	exit 0
+elif [ -n "${1:-}" ]; then
+	arg="${1}"
+	[ "${arg}" = 'dsu' ] && arg='centos'
+	[ "${arg}" = 'ism' ] && arg='ubuntu'
+
+	if [ -e "dell/Dockerfile.${arg}" ]; then
+		DISTRO="${arg}"
+	else
+		echo >&2 "FATAL: Configuration file 'dell/Dockerfile.${arg}' does not exist"
+		exit 1
+	fi
+fi
+
+[ -e "dell/Dockerfile.${DISTRO}" ]
+
+DSU="20.05.00"
+ISM="351"
+
+lsmod | grep -q -- ipmi_devintf || modprobe ipmi_devintf || echo >&2 "WARN: Cannot load IPMI device interface driver"
+lsmod | grep -q -- dcdbas       || modprobe dcdbas       || echo >&2 "WARN: Cannot load Dell Systems Management Base Driver"
+lsmod | grep -q -- dell_rbu     || modprobe dell_rbu     || echo >&2 "WARN: Cannot load Driver for updating BIOS image on DELL systems"
+
+cd dell
+
+echo "Building Dell iDRAC utilities for OS '${DISTRO}' ..."
+
+case "${DISTRO}" in
+	centos)
+		docker build \
+			--build-arg DSU="${DSU}" \
+			--build-arg SET_TERM="${TERM}" \
+			--compress \
+			--file "Dockerfile.${DISTRO}" \
+			--pull \
+			--tag "dell-dsu:${DSU}" \
+			.
+
+		docker rm "dell-dsu-${DSU}" 2>/dev/null || :
+
+		docker run \
+			--device /dev/ipmi0:/dev/ipmi0 \
+			--name="dell-dsu-${DSU}" \
+			--net=host \
+			--privileged \
+			--mount type=bind,source=/var/log/dell/dsu,destination=/opt/dell/srvadmin/var/log \
+			--mount type=bind,source=/var/log/dell,destination=/var/log \
+			--volume /dev/log:/dev/log \
+			"dell-dsu:${DSU}"
+			#--detach \
+			#--publish-all \
+			#--restart=always \
+			# sysctl is not virtualised!
+			#--sysctl net.ipv6.conf.default.disable_ipv6=1 \
+			#--sysctl net.ipv6.conf.all.disable_ipv6=1 \
+		;;
+
+	ubuntu)
+		docker build \
+			--build-arg ISM="${ISM}" \
+			--build-arg SET_TERM="${TERM}" \
+			--compress \
+			--file "Dockerfile.${DISTRO}" \
+			--pull \
+			--tag "dell-ism:${ISM}" \
+			.
+
+		docker rm "dell-ism-${ISM}" 2>/dev/null || :
+
+		docker run \
+			--detach \
+			--device /dev/ipmi0:/dev/ipmi0 \
+			--name="dell-ism-${ISM}" \
+			--net=host \
+			--privileged \
+			--mount type=bind,source=/var/log/dell/ism,destination=/opt/dell/srvadmin/iSM/var/log \
+			--mount type=bind,source=/var/log/dell,destination=/var/log \
+			--volume /dev/log:/dev/log \
+			--cap-add SYS_RAWIO \
+			--cap-add IPC_LOCK \
+			"dell-ism:${ISM}"
+			#--publish-all \
+			#--restart=always \
+			# sysctl is not virtualised!
+			#--sysctl net.ipv6.conf.default.disable_ipv6=1 \
+			#--sysctl net.ipv6.conf.all.disable_ipv6=1 \
+		;;
+esac
+
+# vi: set syntax=sh:

@@ -1,0 +1,53 @@
+
+ARG BASEOS="centos"
+ARG OSVER="8"
+
+FROM "${BASEOS}:${OSVER}"
+
+LABEL \
+    maintainer="stuart@shelton.me" \
+    Description="Dell EMC System Update"
+
+# Last version supporting RHEL6: 20.01.00
+ARG DSU="20.05.00"
+
+ARG SET_TERM="xterm"
+ENV TERM="${SET_TERM}"
+
+ADD "https://linux.dell.com/repo/hardware/DSU_${DSU}/bootstrap.cgi" /tmp/bootstrap.sh
+
+WORKDIR /tmp
+
+RUN sed -e '/^IMPORT_GPG_CONFIRMATION="na"$/s|^|#|' \
+        -i bootstrap.sh && \
+    IMPORT_GPG_CONFIRMATION="yes" sh bootstrap.sh && \
+    rm bootstrap.sh
+
+RUN yum -y update --security && \
+    yum -y install \
+        dmidecode \
+        which \
+        dell-system-update \
+        srvadmin-base \
+        srvadmin-idrac && \
+    yum clean all
+
+#RUN yum -y install srvadmin-all
+#RUN yum -y install syscfg
+#RUN yum -y install raidcfg
+
+COPY entrypoint.sh /usr/libexec/
+RUN test -s /usr/libexec/entrypoint.sh && \
+    chmod 0755 /usr/libexec/entrypoint.sh
+
+#ENTRYPOINT ["/usr/libexec/entrypoint.sh"]
+ENTRYPOINT ["/usr/sbin/dsu"]
+CMD ["-n", "-p"]
+
+#CMD /opt/dell/srvadmin/sbin/srvadmin-services.sh start
+# /usr/libexec/instsvcdrv-helper start
+# /opt/dell/srvadmin/sbin/dsm_om_shrsvcd
+# /opt/dell/srvadmin/sbin/dsm_sa_eventmgrd
+# /opt/dell/srvadmin/sbin/dsm_sa_datamgrd
+
+# vi: set expandtab nowrap colorcolumn=80:

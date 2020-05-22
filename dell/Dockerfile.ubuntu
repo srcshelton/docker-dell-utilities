@@ -1,0 +1,92 @@
+
+ARG BASEOS="ubuntu"
+ARG OSVER="18.04"
+
+FROM "${BASEOS}:${OSVER}"
+
+LABEL \
+    maintainer="stuart@shelton.me" \
+    Description="Dell EMC iDRAC Service Module for Linux, v3.5.1"
+
+ARG OSMA="940"
+ARG ISM="351"
+ARG GPGKEY="1285491434D8786F"
+
+ARG SET_TERM="xterm"
+
+ARG DEBIAN_FRONTEND="noninteractive"
+ARG APT_LISTCHANGES_FRONTEND="none"
+ARG APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE="1"
+
+ENV TERM="${SET_TERM}"
+
+# I can't believe that Docker doesn't support IPv6 at all well...
+# (https://github.com/moby/moby/issues/36954)
+#
+RUN mkdir -p -m 0700 ~/.gnupg && \
+    echo 'disable-ipv6' >> ~/.gnupg/dirmngr.conf
+
+SHELL ["/bin/bash", "-c"]
+
+RUN apt-get update && \
+    apt-get install -y \
+        apt-utils \
+    2> >( grep --line-buffered -v 'debconf: delaying package configuration, since apt-utils is not installed' >&2 ) && \
+    apt-get install -y \
+        gpg && \
+    apt-get autoremove --purge -y && \
+    apt-get autoclean && \
+    rm -rf /var/lib/apt/lists/* && \
+    echo "deb http://linux.dell.com/repo/community/openmanage/${OSMA}/bionic bionic main" \
+        > /etc/apt/sources.list.d/osma-linux.dell.com.sources.list && \
+    echo "deb http://linux.dell.com/repo/community/openmanage/iSM/${ISM}/bionic bionic main" \
+        > /etc/apt/sources.list.d/ism-linux.dell.com.sources.list && \
+    gpg --keyserver "pool.sks-keyservers.net" --recv-key "${GPGKEY}" && \
+    gpg -a --export "${GPGKEY}" | apt-key add -
+
+SHELL ["/bin/sh", "-c"]
+
+RUN apt-get update && \
+    apt-get dist-upgrade --purge -y && \
+    apt-get autoremove --purge -y && \
+    apt-get autoclean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Dell's dependencies are... somewhat lacking in completeness :(
+#
+RUN mkdir -p /usr/share/applications && \
+    apt-get update && \
+    apt-get install -y \
+        desktop-file-utils \
+        inotify-tools \
+        iputils-ping \
+        man-db \
+        netbase \
+        net-tools \
+        nscd \
+        udev \
+        xe \
+        dcism && \
+    apt-get autoremove --purge -y && \
+    apt-get autoclean && \
+    rm -rf /var/lib/apt/lists/* && \
+    mkdir -p \
+        /opt/dell/srvadmin/iSM/var/run/openmanage \
+        /var/run/nscd \
+        /run/udev/data
+
+COPY entrypoint.sh /usr/libexec/
+RUN test -s /usr/libexec/entrypoint.sh
+
+COPY dcism-setup_usbintf.sh /opt/dell/srvadmin/iSM/sbin/
+RUN test -s /opt/dell/srvadmin/iSM/sbin/dcism-setup_usbintf.sh
+
+RUN chmod 0755 /opt/dell/srvadmin/iSM/sbin/dcism-setup_usbintf.sh ; \
+    touch /opt/dell/srvadmin/iSM/etc/ini/usbnicconfig.ini ; \
+    /opt/dell/srvadmin/iSM/bin/ism-get-package.sh ; \
+    chmod 0755 /usr/libexec/entrypoint.sh
+
+ENTRYPOINT ["/usr/libexec/entrypoint.sh"]
+#CMD []
+
+# vi: set expandtab nowrap colorcolumn=80:
