@@ -18,19 +18,41 @@ ADD "https://linux.dell.com/repo/hardware/DSU_${DSU}/bootstrap.cgi" /tmp/bootstr
 
 WORKDIR /tmp
 
+# podman noisily fails to archive created sockets...
+# This option has been removed - https://dev.gnupg.org/T2858 :(
+#RUN mkdir -pm 0700 /root/.gnupg && \
+#    echo 'no-use-agent' >> /root/.gnupg/gpg.conf && \
+#    chmod 0600 /root/.gnupg/gpg.conf && \
 RUN sed -e '/^IMPORT_GPG_CONFIRMATION="na"$/s|^|#|' \
         -i bootstrap.sh && \
     IMPORT_GPG_CONFIRMATION="yes" sh bootstrap.sh && \
-    rm bootstrap.sh
+    rm -rf bootstrap.sh /root/.gnupg/S.gpg-agent*
 
+# In release 20.06.00, /usr/sbin/dsu is linked against libssh2, which the
+# package does not depend on.  This isn't actually available by default, as it
+# comes from an EPEL repository.
+# This was not the case in release 20.05.00.
 RUN yum -y update --security && \
     yum -y install \
         dmidecode \
         which \
         dell-system-update \
-        srvadmin-base \
-        srvadmin-idrac && \
+        epel-release && \
+    yum -y install \
+        libssh2 && \
     yum clean all
+#        srvadmin-base \
+#        srvadmin-idrac && \
+
+# Additional packages from https://topics-cdn.dell.com/pdf/omlinuxig_en-us.pdf
+#RUN yum -y install \
+#        libcmpiCppImpl0 \
+#        libwsman1 \
+#        openwsman-server \
+#        sblim-sfcb \
+#        sblim-sfcc \
+#        srvadmin-all \
+#    yum clean all
 
 #RUN yum -y install srvadmin-all
 #RUN yum -y install syscfg
@@ -39,6 +61,9 @@ RUN yum -y update --security && \
 COPY entrypoint.sh /usr/libexec/
 RUN test -s /usr/libexec/entrypoint.sh && \
     chmod 0755 /usr/libexec/entrypoint.sh
+
+# For srvadmin, if fully installed
+#EXPOSE 1311
 
 #ENTRYPOINT ["/usr/libexec/entrypoint.sh"]
 ENTRYPOINT ["/usr/sbin/dsu"]
@@ -50,4 +75,4 @@ CMD ["-n", "-p"]
 # /opt/dell/srvadmin/sbin/dsm_sa_eventmgrd
 # /opt/dell/srvadmin/sbin/dsm_sa_datamgrd
 
-# vi: set expandtab nowrap colorcolumn=80:
+# vi: set expandtab nowrap colorcolumn=80 syntax=dockerfile:

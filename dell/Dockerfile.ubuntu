@@ -89,4 +89,4 @@ RUN chmod 0755 /opt/dell/srvadmin/iSM/sbin/dcism-setup_usbintf.sh ; \
 ENTRYPOINT ["/usr/libexec/entrypoint.sh"]
 #CMD []
 
-# vi: set expandtab nowrap colorcolumn=80:
+# vi: set expandtab nowrap colorcolumn=80 syntax=dockerfile:

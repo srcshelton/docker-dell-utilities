@@ -3,12 +3,12 @@
 set -eu
 
 ubuntu() {
-	/usr/sbin/nscd
-	/lib/systemd/systemd-udevd -d
+	#/usr/sbin/nscd
+	#/lib/systemd/systemd-udevd --daemon
 
-	udevadm control --start-exec-queue
-	udevadm trigger
-	udevadm settle
+	#udevadm control --start-exec-queue
+	#udevadm trigger
+	#udevadm settle
 
 	export PATH="${PATH}:/opt/dell/srvadmin/iSM/sbin:/opt/dell/srvadmin/iSM/bin"
 
@@ -19,7 +19,7 @@ ubuntu() {
 	#exec inotifywait -q -e close -e delete_self /opt/dell/srvadmin/iSM/var/run/openmanage/dsm_ism_srvmgrd.pid
 	#
 	# Just in case dsm_ism_srvmgrd doesn't remove its PID file on exit...
-	exec inotifywait -q -e delete -e delete_self "/proc/$( < /opt/dell/srvadmin/iSM/var/run/openmanage/dsm_ism_srvmgrd.pid )"
+	exec inotifywait -q -e delete -e delete_self "/proc/$( cat /opt/dell/srvadmin/iSM/var/run/openmanage/dsm_ism_srvmgrd.pid )"
 } # ubuntu
 
 centos() {
