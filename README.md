@@ -1,17 +1,14 @@
-Dell OMSA on CentOS
-===================
+# Dell OMSA on CentOS
 
 Deploy the Dell/EMC OpenManage Server Administrator tools into a Docker
 container and run DSU (Dell System Update) when executed.
 
-Dell ISM on Ubuntu
-==================
+# Dell ISM on Ubuntu
 
 Deploy the Dell/EMC iDRAC Service Module into a Docker container and run the
 ISM when executed.
 
-Notes
-=====
+## Notes
 
 The following kernel modules are used by the ISM:
 
@@ -21,8 +18,7 @@ dell_rbu
 ipmi_devintf
 ```
 
-Licences
-========
+# Licences
 
 Included is `dcism-setup_usbintf.sh` - a rewrite of the largely-broken script
 provided by Dell themselves.  The licence under which the original script is
@@ -30,8 +26,16 @@ distributed is unclear from both its contents and the installation procedure
 which created it. Any licence text distributed with this repository does not,
 therefore, apply to this file.
 
-Known issues
-============
+# Known issues
+
+ * The DSU process has not been thoroughly explored to ensure that all required
+   setup and dependencies are initialised.
+
+## Known Docker issues
+
+The below issues were encountered when using Docker to provide virtualisation
+services.  When using `podman` and `host`-networking, IPv6 is fully supported
+and so there is no further issue.
 
  * The linux kernel doesn't virtualise the sysctl interface, which is the only
    method docker provides to control use of IPv6 if supported by the host
@@ -46,8 +50,7 @@ Known issues
    3. Configure the docker daemon for IPv6 support which - as of release
       19.03 - is still non-default, awkward, and brings other limitations.
 
- * The DSU process has not been thoroughly explored to ensure that all required
-   setup and dependencies are initialised;
+## Solved issues
 
  * The ISM binary appears to be operating as expected from the OS level, but
    the iDRAC system itself reports that the ISM disconnects shortly after
