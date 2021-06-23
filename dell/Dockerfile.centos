@@ -1,6 +1,14 @@
 
-ARG BASEOS="centos"
+ARG BASEOS="docker.io/centos"
 ARG OSVER="8"
+
+ARG REPO="https://linux.dell.com/repo/hardware"
+
+# Last version supporting RHEL6: 20.01.00
+ARG DSU="20.05.00"
+
+ARG SET_TERM="vt100"
+
 
 FROM "${BASEOS}:${OSVER}"
 
@@ -8,13 +16,13 @@ LABEL \
     maintainer="stuart@shelton.me" \
     Description="Dell EMC System Update"
 
-# Last version supporting RHEL6: 20.01.00
-ARG DSU="20.05.00"
+ARG REPO
+ARG DSU
 
-ARG SET_TERM="xterm"
+ARG SET_TERM
 ENV TERM="${SET_TERM}"
 
-ADD "https://linux.dell.com/repo/hardware/DSU_${DSU}/bootstrap.cgi" /tmp/bootstrap.sh
+ADD "${REPO}/DSU_${DSU}/bootstrap.cgi" /tmp/bootstrap.sh
 
 WORKDIR /tmp
 

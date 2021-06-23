@@ -1,5 +1,28 @@
 #! /bin/sh
 
+# DSU uses more than 512MB when applying updates...
+#
+# Tiny
+#: "${PODMAN_MEMORY_RESERVATION:=256m}"
+#: "${PODMAN_MEMORY_LIMIT:=512m}"
+#: "${PODMAN_SWAP_LIMIT:=1g}"
+# Small
+: "${PODMAN_MEMORY_RESERVATION:=512m}"
+: "${PODMAN_MEMORY_LIMIT:=1g}"
+: "${PODMAN_SWAP_LIMIT:=2g}"
+# Medium
+#: "${PODMAN_MEMORY_RESERVATION:=1g}"
+#: "${PODMAN_MEMORY_LIMIT:=2g}"
+#: "${PODMAN_SWAP_LIMIT:=4g}"
+# Large
+#: "${PODMAN_MEMORY_RESERVATION:=2g}"
+#: "${PODMAN_MEMORY_LIMIT:=4g}"
+#: "${PODMAN_SWAP_LIMIT:=8g}"
+# Extra-Large
+#: "${PODMAN_MEMORY_RESERVATION:=4g}"
+#: "${PODMAN_MEMORY_LIMIT:=8g}"
+#: "${PODMAN_SWAP_LIMIT:=16g}"
+
 set -eu
 
 cd "$( dirname "$( readlink -e "${0}" )" )" || exit 1
@@ -10,6 +33,7 @@ DISTRO='ubuntu'
 docker='docker'
 extra_build_args=''
 arg=''
+root=''
 
 if command -v podman >/dev/null 2>&1; then
 	docker='podman'
@@ -18,45 +42,95 @@ fi
 
 [ -d dell ]
 
-if echo " ${1:-} " | grep -Eq -- ' -(h|-help) '; then
-	echo >&2 "Usage: $( basename "${0}" ) [<dsu|ism> [command]]"
-	exit 0
-elif [ -n "${1:-}" ]; then
-	arg="${1}"
+while [ -n "${1:-}" ]; do
+	case "${1}" in
+		-h|--help)
+			echo >&2 "Usage: $( basename "${0}" ) [<dsu|ism> [command]]"
+			exit 0
+			;;
+		-d|--dsu|dsu|centos)
+			arg='centos'
+			;;
+		-i|--ism|ism|ubuntu)
+			arg='ubuntu'
+			;;
+		-r=*|--root=*)
+			root="$( echo "${1}" | cut -d'=' -f 2- )"
+			;;
+		-r|--root)
+			if [ -z "${2:-}" ]; then
+				echo >&2 "FATAL: option '${1}' requires an argument"
+				exit 1
+			fi
+			shift
+			root="${1:-}"
+			;;
+		*)
+			echo >&2 "FATAL: Unknown option '${1}'"
+			exit 1
+			;;
+	esac
 	shift
-	[ "${arg}" = 'dsu' ] && arg='centos'
-	[ "${arg}" = 'ism' ] && arg='ubuntu'
-
-	if [ -e "dell/Dockerfile.${arg}" ]; then
-		DISTRO="${arg}"
-	else
-		echo >&2 "FATAL: Configuration file 'dell/Dockerfile.${arg}' does not exist"
-		exit 1
-	fi
-fi
-
-[ -e "dell/Dockerfile.${DISTRO}" ]
-
+done
 if [ $(( $( id -u ) )) -ne 0 ]; then
 	echo >&2 "FATAL: Please re-run '$( basename "${0}" )' as user 'root'"
 	exit 1
 fi
 
-#UBUNTU='20.04'
-# 'latest' is always the most recent LTS release, whereas 'rolling' is the most
-# recent GA release:
-UBUNTU='latest'
+if [ -n "${root:-}" ] && ! [ -d "${root}" ]; then
+	echo >&2 "FATAL: image directory '${root}' does not exist"
+	exit 1
+fi
+if [ -e "dell/Dockerfile.${arg}" ]; then
+	DISTRO="${arg}"
+else
+	echo >&2 "FATAL: Configuration file 'dell/Dockerfile.${arg}' does not exist"
+	exit 1
+fi
+unset arg
 
-#CENTOS='8'
+[ -e "dell/Dockerfile.${DISTRO}" ]
+
+OMREPO='http://linux.dell.com/repo/community/openmanage'
+HWREPO='https://linux.dell.com/repo/hardware'
+
+#ISM='351'
+#ISM='360'
+ISM="$(
+	curl -fLsS "${OMREPO}/" |
+	grep 'iSM' |
+	grep -Eo '<a href="iSM/[0-9]+">iSM/[0-9]+/<' |
+	cut -d'/' -f 3 |
+	sort -n |
+	tail -n 1
+)"
+
+# See http://linux.dell.com/repo/community/openmanage/
+#OSMA='950'
+OSMA="$(
+	curl -fLsS "${OMREPO}/" |
+	grep -v 'iSM' |
+	grep -Eo '<a href="[0-9]+/">[0-9]+/<' |
+	cut -d '"' -f 2 |
+	sed 's|/||g' |
+	sort -n |
+	tail -n 1
+)"
+
+# This *must* be set to the release name of the chosen OS version, which must
+# exist as a sub-directory
+# beneath http://linux.dell.com/repo/community/openmanage/${OSMA}/ and
+# http://linux.dell.com/repo/community/openmanage/iSM/${ISM}/
+#UBUNTU='bionic'
+UBUNTU='focal'
+
 # 'latest' is always the most recent GA release:
-CENTOS='latest'
+#CENTOS='latest'
+# ... but CentOS was killed-off at release 8 :(
+CENTOS='8'
 
-#DSU="20.05.00"
+#DSU='20.05.00'
 DSU="$( curl -s https://linux.dell.com/repo/hardware/ | grep 'Dell System Update_' | head -n 1 | cut -d'_' -f 2 | cut -d'/' -f 1 )" || exit 1
-
-# There doesn't seem to be a viable means to determine the latest Service
-# Module version automatically :(
-ISM="351"
 
 lsmod | grep -q -- ipmi_devintf || modprobe ipmi_devintf || echo >&2 "WARN: Cannot load IPMI device interface driver"
 lsmod | grep -q -- dcdbas       || modprobe dcdbas       || echo >&2 "WARN: Cannot load Dell Systems Management Base Driver"
@@ -73,34 +147,39 @@ case "${DISTRO}" in
 	centos)
 		mkdir -p /var/log/dell/dsu /var/log/dell/srvadmin
 
-		if ! [ "$( $docker image ls -n "dell-dsu:${DSU}" | wc -l )" = '1' ]; then
+		if ! [ "$( $docker image ls -n "localhost/dell-dsu:${DSU}" | wc -l )" = '1' ]; then
 			echo "Building Dell iDRAC DSU utilities v${DSU} for '${DISTRO}' distribution ..."
 
 			trap '' INT
-			$docker pull "centos:${CENTOS}"
+			$docker ${root:+--storage-opt="" --root "${root}"} image pull "$( grep -- '^ARG BASEOS=' "Dockerfile.${DISTRO}" | cut -d'"' -f 2 ):${CENTOS:-$( grep -- '^ARG OSVER=' "Dockerfile.${DISTRO}" | cut -d'"' -f 2 )}"
 			trap - INT
 
-			$docker build \
+			$docker ${root:+--storage-opt="" --root "${root}"} image build \
+					--build-arg OSVER="${CENTOS}" \
+					--build-arg REPO="${HWREPO}" \
 					--build-arg DSU="${DSU}" \
 					--build-arg SET_TERM="${TERM}" \
 					--compress \
 					--file "Dockerfile.${DISTRO}" \
-					--pull \
 					--tag "dell-dsu:${DSU}" \
 				.
 					#--network slirp4netns \
+					#--pull \
 		fi
 
 		echo "Running Dell iDRAC DSU utilities v${DSU} for '${DISTRO}' distribution ..."
 
 		trap '' INT
-		$docker rm "dell-dsu-${DSU}" 2>/dev/null || :
+		$docker container rm "dell-dsu-${DSU}" 2>/dev/null || :
 		trap - INT
 
-		$docker run \
+		$docker container run \
 				--device /dev/ipmi0:/dev/ipmi0 \
 				--init \
 				--interactive \
+				${PODMAN_MEMORY_RESERVATION:+--memory-reservation ${PODMAN_MEMORY_RESERVATION}} \
+				${PODMAN_MEMORY_LIMIT:+--memory ${PODMAN_MEMORY_LIMIT}} \
+				${PODMAN_SWAP_LIMIT:+--memory-swap ${PODMAN_SWAP_LIMIT}} \
 				--mount type=bind,source=/var/log/dell,destination=/var/log \
 				--mount type=bind,source=/var/log/dell/dsu,destination=/usr/libexec/dell_dup \
 				--mount type=bind,source=/var/log/dell/srvadmin,destination=/opt/dell/srvadmin/var/log \
@@ -123,37 +202,42 @@ case "${DISTRO}" in
 	ubuntu)
 		mkdir -p /var/log/dell/ism
 
-		if ! [ "$( $docker image ls -n "dell-ism:${ISM}" | wc -l )" = '1' ]; then
+		if ! [ "$( $docker image ls -n "localhost/dell-ism:${ISM}" | wc -l )" = '1' ]; then
 			echo "Building Dell iDRAC ISM utilities v${ISM} for '${DISTRO}' distribution ..."
 
 			trap '' INT
-			$docker pull "ubuntu:${UBUNTU}"
+			$docker ${root:+--storage-opt="" --root "${root}"} image pull "$( grep -- '^ARG BASEOS=' "Dockerfile.${DISTRO}" | cut -d'"' -f 2 ):${UBUNTU:-$( grep -- '^ARG OSVER=' "Dockerfile.${DISTRO}" | cut -d'"' -f 2 )}"
 			trap - INT
 
 			# shellcheck disable=SC2086
-			$docker build \
+			$docker ${root:+--storage-opt="" --root "${root}"} image build \
 					  ${extra_build_args} \
 					--build-arg OSVER="${UBUNTU}" \
+					--build-arg REPO="${OMREPO}" \
+					--build-arg OSMA="${OSMA}" \
 					--build-arg ISM="${ISM}" \
 					--build-arg SET_TERM="${TERM}" \
 					--compress \
 					--file "Dockerfile.${DISTRO}" \
-					--pull \
 					--tag "dell-ism:${ISM}" \
 				.
 					#--network slirp4netns \
+					#--pull \
 		fi
 
 		echo "Running Dell iDRAC ISM utilities v${ISM} for '${DISTRO}' distribution ..."
 
 		trap '' INT
-		$docker rm "dell-ism-${ISM}" 2>/dev/null || :
+		$docker container rm "dell-ism-${ISM}" 2>/dev/null || :
 		trap - INT
 
-		$docker run \
+		$docker container run \
 				--detach \
 				--device /dev/ipmi0:/dev/ipmi0 \
 				--init \
+				${PODMAN_MEMORY_RESERVATION:+--memory-reservation ${PODMAN_MEMORY_RESERVATION}} \
+				${PODMAN_MEMORY_LIMIT:+--memory ${PODMAN_MEMORY_LIMIT}} \
+				${PODMAN_SWAP_LIMIT:+--memory-swap ${PODMAN_SWAP_LIMIT}} \
 				--mount type=bind,source=/var/log/dell,destination=/var/log \
 				--mount type=bind,source=/var/log/dell/ism,destination=/opt/dell/srvadmin/iSM/var/log \
 				--name="dell-ism-${ISM}" \
