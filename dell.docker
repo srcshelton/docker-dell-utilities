@@ -176,7 +176,7 @@ case "${DISTRO}" in
 		$docker container run \
 				--device /dev/ipmi0:/dev/ipmi0 \
 				--init \
-				--interactive \
+				$( [ -t 0 ] && echo '--interactive' ) \
 				${PODMAN_MEMORY_RESERVATION:+--memory-reservation ${PODMAN_MEMORY_RESERVATION}} \
 				${PODMAN_MEMORY_LIMIT:+--memory ${PODMAN_MEMORY_LIMIT}} \
 				${PODMAN_SWAP_LIMIT:+--memory-swap ${PODMAN_SWAP_LIMIT}} \
@@ -187,7 +187,7 @@ case "${DISTRO}" in
 				--name="dell-dsu-${DSU}" \
 				--privileged \
 				--rm \
-				--tty \
+				$( [ -t 0 ] && echo '--tty' ) \
 			"dell-dsu:${DSU}" "${@}"
 				#--detach \
 				#--network slirp4netns \
