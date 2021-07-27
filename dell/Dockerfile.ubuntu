@@ -6,8 +6,12 @@ ARG REPO="http://linux.dell.com/repo/community/openmanage"
 ARG OSMA="940"
 ARG ISM="351"
 ARG GPGKEY="1285491434D8786F"
+#ARG GPGSRV="pool.sks-keyservers.net" # Died 20210621 :(
+ARG GPGSRV="pgp.mit.edu"
 
 ARG SET_TERM="vt100"
+
+# ---
 
 FROM "${BASEOS}:${OSVER}"
 
@@ -20,6 +24,7 @@ ARG REPO
 ARG OSMA
 ARG ISM
 ARG GPGKEY
+ARG GPGSRV
 
 ARG DEBIAN_FRONTEND="noninteractive"
 ARG APT_LISTCHANGES_FRONTEND="none"
@@ -49,7 +54,7 @@ RUN apt-get update && \
         > /etc/apt/sources.list.d/osma-linux.dell.com.sources.list && \
     echo "deb ${REPO}/iSM/${ISM}/${OSVER} ${OSVER} main" \
         > /etc/apt/sources.list.d/ism-linux.dell.com.sources.list && \
-    gpg --keyserver "pool.sks-keyservers.net" --recv-key "${GPGKEY}" && \
+    gpg --keyserver "${GPGSRV}" --recv-key "${GPGKEY}" && \
     gpg -a --export "${GPGKEY}" | apt-key add - && \
     apt-get remove -y --purge \
         dirmngr \
