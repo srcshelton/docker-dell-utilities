@@ -155,7 +155,7 @@ case "${DISTRO}" in
 			echo "Building Dell iDRAC DSU utilities v${DSU} for '${DISTRO}' distribution ..."
 
 			trap '' INT
-			$docker ${root:+--storage-opt="" --root "${root}"} image pull "$(
+			$docker ${root:+--root "${root}"} image pull "$(
 				grep -- '^ARG BASEOS=' "Dockerfile.${DISTRO}" |
 				cut -d'"' -f 2
 			):${CENTOS:-$(
@@ -164,7 +164,7 @@ case "${DISTRO}" in
 			)}"
 			trap - INT
 
-			$docker ${root:+--storage-opt="" --root "${root}"} image build \
+			$docker ${root:+--root "${root}"} image build \
 					--build-arg OSVER="${CENTOS}" \
 					--build-arg REPO="${HWREPO}" \
 					--build-arg DSU="${DSU}" \
@@ -216,11 +216,17 @@ case "${DISTRO}" in
 			echo "Building Dell iDRAC ISM utilities v${ISM} for '${DISTRO}' distribution ..."
 
 			trap '' INT
-			$docker ${root:+--storage-opt="" --root "${root}"} image pull "$( grep -- '^ARG BASEOS=' "Dockerfile.${DISTRO}" | cut -d'"' -f 2 ):${UBUNTU:-$( grep -- '^ARG OSVER=' "Dockerfile.${DISTRO}" | cut -d'"' -f 2 )}"
+			$docker ${root:+--root "${root}"} image pull "$(
+				grep -- '^ARG BASEOS=' "Dockerfile.${DISTRO}" |
+				cut -d'"' -f 2
+			):${UBUNTU:-$(
+				grep -- '^ARG OSVER=' "Dockerfile.${DISTRO}" |
+				cut -d'"' -f 2
+			)}"
 			trap - INT
 
 			# shellcheck disable=SC2086
-			$docker ${root:+--storage-opt="" --root "${root}"} image build \
+			$docker ${root:+--root "${root}"} image build \
 					  ${extra_build_args} \
 					--build-arg OSVER="${UBUNTU}" \
 					--build-arg REPO="${OMREPO}" \
