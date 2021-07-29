@@ -1,0 +1,13 @@
+#! /bin/sh
+
+echo >&2 "DEBUG: 'systemctl' shim received args '${*:-}'"
+
+case "${1}" in
+	is_enabled)
+		echo 'enabled'
+		;;
+esac
+
+true
+
+# vi: set syntax=sh:

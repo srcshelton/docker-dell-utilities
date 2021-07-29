@@ -8,6 +8,7 @@ ARG ISM="351"
 ARG GPGKEY="1285491434D8786F"
 #ARG GPGSRV="pool.sks-keyservers.net" # Died 20210621 :(
 ARG GPGSRV="pgp.mit.edu"
+ARG GPGURL="https://linux.dell.com/files/pgp_pubkeys/0x${GPGKEY}.asc"
 
 ARG SET_TERM="vt100"
 
@@ -25,6 +26,7 @@ ARG OSMA
 ARG ISM
 ARG GPGKEY
 ARG GPGSRV
+ARG GPGURL
 
 ARG DEBIAN_FRONTEND="noninteractive"
 ARG APT_LISTCHANGES_FRONTEND="none"
@@ -41,7 +43,8 @@ RUN mkdir -p -m 0700 ~/.gnupg && \
 
 SHELL ["/bin/bash", "-c"]
 
-RUN apt-get update && \
+RUN set -eo pipefail 2>/dev/null || : ; \
+    apt-get update && \
     apt-get install -y --no-install-recommends \
         apt-utils \
     2> >( grep --line-buffered -v 'debconf: delaying package configuration, since apt-utils is not installed' >&2 ) && \
@@ -54,8 +57,18 @@ RUN apt-get update && \
         > /etc/apt/sources.list.d/osma-linux.dell.com.sources.list && \
     echo "deb ${REPO}/iSM/${ISM}/${OSVER} ${OSVER} main" \
         > /etc/apt/sources.list.d/ism-linux.dell.com.sources.list && \
-    gpg --keyserver "${GPGSRV}" --recv-key "${GPGKEY}" && \
-    gpg -a --export "${GPGKEY}" | apt-key add - && \
+    echo "Attempting to retrieve key '${GPGKEY}' from host '${GPGSRV}' ..." && \
+    if gpg --keyserver "${GPGSRV}" --recv-key "${GPGKEY}"; then \
+        gpg --armor --export "${GPGKEY}" | apt-key add - ; \
+    else \
+        apt-get install -y --no-install-recommends \
+            curl && \
+        curl -fLsSo /tmp/key.asc "${GPGURL}" && \
+        apt-get remove -y --purge \
+            curl && \
+        apt-key add /tmp/key.asc && \
+        rm /tmp/key.asc ; \
+    fi && \
     apt-get remove -y --purge \
         dirmngr \
         gpg \
@@ -72,6 +85,14 @@ RUN apt-get update && \
     apt-get autoclean && \
     rm -rf /var/lib/apt/lists/*
 
+# Dell's post-install scripts fail if 'systemctl is_enabled' can't be executed;
+# the installed binaries require 'libssl.so' to be present
+#
+COPY systemctl /usr/bin/
+RUN test -s /usr/bin/systemctl && \
+    chmod 0755 /usr/bin/systemctl && \
+    ln -s libssl.so.1.1 /usr/lib/x86_64-linux-gnu/libssl.so
+
 # Dell's dependencies are... somewhat lacking in completeness :(
 #
 RUN mkdir -p /usr/share/applications && \
@@ -81,19 +102,25 @@ RUN mkdir -p /usr/share/applications && \
         desktop-file-utils \
         inotify-tools \
         iputils-ping \
+        kmod \
         netbase \
         net-tools \
         nscd \
         udev \
         xe \
         dcism && \
+    apt-get install -y --no-install-recommends \
+        libargtable2-0 \
+        srvadmin-hapi \
+        srvadmin-idracadm7 && \
     apt-get autoremove --purge -y && \
     apt-get autoclean && \
     rm -rf /var/lib/apt/lists/* && \
     mkdir -p \
         /opt/dell/srvadmin/iSM/var/run/openmanage \
         /var/run/nscd \
-        /run/udev/data
+        /run/udev/data && \
+    chmod 0755 /opt/dell/srvadmin/sbin/racadm-wrapper-idrac7
 
 COPY entrypoint.sh /usr/libexec/
 RUN test -s /usr/libexec/entrypoint.sh
@@ -109,4 +136,4 @@ RUN chmod 0755 /opt/dell/srvadmin/iSM/sbin/dcism-setup_usbintf.sh ; \
 ENTRYPOINT ["/usr/libexec/entrypoint.sh"]
 #CMD [""]
 
-# vi: set expandtab nowrap colorcolumn=80 syntax=dockerfile:
+# vi: set expandtab shiftwidth=4 tabstop=4 nowrap colorcolumn=80 syntax=dockerfile:
