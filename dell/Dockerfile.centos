@@ -1,5 +1,6 @@
 
-ARG BASEOS="docker.io/centos"
+#ARG BASEOS="docker.io/centos"
+ARG BASEOS="docker.io/rockylinux/rockylinux"
 ARG OSVER="8"
 
 ARG REPO="https://linux.dell.com/repo/hardware"
@@ -42,29 +43,32 @@ RUN sed -e '/^IMPORT_GPG_CONFIRMATION="na"$/s|^|#|' \
 # This was not the case in release 20.05.00.
 RUN yum -y update --security && \
     yum -y install \
-        dmidecode \
-        which \
-        dell-system-update \
         epel-release && \
     yum -y install \
-        libssh2 && \
+        dmidecode \
+        libssh2 \
+        which && \
     yum clean all
-#        srvadmin-base \
-#        srvadmin-idrac && \
 
-# Additional packages from https://topics-cdn.dell.com/pdf/omlinuxig_en-us.pdf
+RUN yum -y install \
+        dell-system-update && \
+    yum clean all
+
+# Additional packages from https://dl.dell.com/topicspdf/omlinuxig_en-us.pdf
+#RUN yum -y install \
+#        perl \
+#    yum clean all
 #RUN yum -y install \
 #        libcmpiCppImpl0 \
 #        libwsman1 \
 #        openwsman-server \
 #        sblim-sfcb \
 #        sblim-sfcc \
-#        srvadmin-all \
+#        srvadmin-all && \
 #    yum clean all
 
-#RUN yum -y install srvadmin-all
-#RUN yum -y install syscfg
-#RUN yum -y install raidcfg
+#RUN yum -y install syscfg && yum clean all
+#RUN yum -y install raidcfg && yum clean all
 
 COPY entrypoint.sh /usr/libexec/
 RUN test -s /usr/libexec/entrypoint.sh && \
@@ -74,13 +78,13 @@ RUN test -s /usr/libexec/entrypoint.sh && \
 #EXPOSE 1311
 
 #ENTRYPOINT ["/usr/libexec/entrypoint.sh"]
+#CMD ["/opt/dell/srvadmin/sbin/srvadmin-services.sh", "start"]
+#CMD ["/usr/libexec/instsvcdrv-helper", "start"]
+#CMD ["/opt/dell/srvadmin/sbin/dsm_om_shrsvcd"]
+#CMD ["/opt/dell/srvadmin/sbin/dsm_sa_eventmgrd"]
+#CMD ["/opt/dell/srvadmin/sbin/dsm_sa_datamgrd"]
+
 ENTRYPOINT ["/usr/sbin/dsu"]
 CMD ["-n", "-p"]
-
-#CMD /opt/dell/srvadmin/sbin/srvadmin-services.sh start
-# /usr/libexec/instsvcdrv-helper start
-# /opt/dell/srvadmin/sbin/dsm_om_shrsvcd
-# /opt/dell/srvadmin/sbin/dsm_sa_eventmgrd
-# /opt/dell/srvadmin/sbin/dsm_sa_datamgrd
 
 # vi: set expandtab nowrap colorcolumn=80 syntax=dockerfile:

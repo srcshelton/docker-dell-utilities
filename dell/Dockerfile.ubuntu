@@ -100,6 +100,7 @@ RUN mkdir -p /usr/share/applications && \
     apt-get install -y --no-install-recommends man-db && \
     apt-get install -y --no-install-recommends \
         desktop-file-utils \
+        dmidecode \
         inotify-tools \
         iputils-ping \
         kmod \
@@ -109,18 +110,26 @@ RUN mkdir -p /usr/share/applications && \
         udev \
         xe \
         dcism && \
-    apt-get install -y --no-install-recommends \
-        libargtable2-0 \
-        srvadmin-hapi \
-        srvadmin-idracadm7 && \
     apt-get autoremove --purge -y && \
     apt-get autoclean && \
     rm -rf /var/lib/apt/lists/* && \
     mkdir -p \
         /opt/dell/srvadmin/iSM/var/run/openmanage \
         /var/run/nscd \
-        /run/udev/data && \
-    chmod 0755 /opt/dell/srvadmin/sbin/racadm-wrapper-idrac7
+        /run/udev/data
+
+# srvadmin-idracadm7 is unable to run stand-alone - it only succeeds when
+# unspecified components from srvadmin-all are also present :(
+#
+#RUN apt-get install -y --no-install-recommends \
+#        libargtable2-0 \
+#        srvadmin-hapi \
+#        srvadmin-idracadm7 && \
+#    apt-get autoremove --purge -y && \
+#    apt-get autoclean && \
+#    rm -rf /var/lib/apt/lists/* && \
+#    chmod 0755 /opt/dell/srvadmin/sbin/racadm-wrapper-idrac7 && \
+#    touch /var/log/dchipm64.log
 
 COPY entrypoint.sh /usr/libexec/
 RUN test -s /usr/libexec/entrypoint.sh

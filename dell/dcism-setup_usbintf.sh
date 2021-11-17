@@ -32,7 +32,9 @@ declare -r OS_RELEASE_FILE="/etc/os-release"
 # However, in Docker the 'net' directory exists, but is empty.
 #
 # Enabling host networking *may* affect this, otherwise an interface
-# can be moved into the container namespace - see https://stackoverflow.com/a/60564074
+# can be moved into the container namespace - see [1].
+#
+# [1]: https://stackoverflow.com/a/60564074
 
 
 # This seems to be a much cleaner approach to finding the Dell USB interface...

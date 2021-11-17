@@ -32,6 +32,7 @@ trace=${TRACE:-}
 DISTRO='ubuntu'
 docker='docker'
 extra_build_args=''
+check=0
 arg=''
 root=''
 
@@ -45,10 +46,13 @@ fi
 while [ -n "${1:-}" ]; do
 	case "${1}" in
 		-h|--help)
-			echo >&2 "Usage: $( basename "${0}" ) [<dsu|ism> [command]]"
+			echo >&2 "Usage: $( basename "${0}" ) [<dsu|ism> [--check|command]]"
 			exit 0
 			;;
-		-d|--dsu|dsu|centos)
+		-c|--check)
+			check=1
+			;;
+		-d|--dsu|dsu|centos|rocky)
 			arg='centos'
 			;;
 		-i|--ism|ism|ubuntu)
@@ -149,6 +153,14 @@ devlog="$( readlink -e /dev/log )"
 
 case "${DISTRO}" in
 	centos)
+		if [ $(( check )) -eq 1 ]; then
+			echo "Latest release of Dell iDRAC DSU utilities is v${DSU} for '${DISTRO}' distribution"
+			if ! [ "$( $docker image ls -n "localhost/dell-dsu:${DSU}" | wc -l )" = '1' ]; then
+				echo "Image 'localhost/dell-dsu:${DSU}' does not exist"
+			fi
+			exit 0
+		fi
+
 		mkdir -p /var/log/dell/dsu /var/log/dell/srvadmin
 
 		if ! [ "$( $docker image ls -n "localhost/dell-dsu:${DSU}" | wc -l )" = '1' ]; then
@@ -180,7 +192,8 @@ case "${DISTRO}" in
 		echo "Running Dell iDRAC DSU utilities v${DSU} for '${DISTRO}' distribution ..."
 
 		trap '' INT
-		$docker container rm "dell-dsu-${DSU}" 2>/dev/null || :
+		$docker container stop "dell-dsu-${DSU}" 2>/dev/null || :
+		$docker container rm -v "dell-dsu-${DSU}" 2>/dev/null || :
 		trap - INT
 
 		$docker container run \
@@ -210,6 +223,14 @@ case "${DISTRO}" in
 		;;
 
 	ubuntu)
+		if [ $(( check )) -eq 1 ]; then
+			echo "Latest release of Dell iDRAC ISM utilities is v${ISM} for '${DISTRO}' distribution"
+			if ! [ "$( $docker image ls -n "localhost/dell-ism:${ISM}" | wc -l )" = '1' ]; then
+				echo "Image 'localhost/dell-ism:${ISM}' does not exist"
+			fi
+			exit 0
+		fi
+
 		mkdir -p /var/log/dell/ism
 
 		if ! [ "$( $docker image ls -n "localhost/dell-ism:${ISM}" | wc -l )" = '1' ]; then
@@ -244,7 +265,8 @@ case "${DISTRO}" in
 		echo "Running Dell iDRAC ISM utilities v${ISM} for '${DISTRO}' distribution ..."
 
 		trap '' INT
-		$docker container rm "dell-ism-${ISM}" 2>/dev/null || :
+		$docker container stop "dell-ism-${ISM}" 2>/dev/null || :
+		$docker container rm -v "dell-ism-${ISM}" 2>/dev/null || :
 		trap - INT
 
 		$docker container run \

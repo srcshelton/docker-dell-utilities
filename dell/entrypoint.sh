@@ -12,7 +12,8 @@ ubuntu() {
 
 	export PATH="${PATH}:/opt/dell/srvadmin/iSM/sbin:/opt/dell/srvadmin/iSM/bin"
 
-	/opt/dell/srvadmin/iSM/sbin/dcism-setup_usbintf.sh || true
+	/opt/dell/srvadmin/iSM/sbin/dcism-setup_usbintf.sh || :
+	/opt/dell/srvadmin/iSM/bin/ism-get-package.sh || :
 
 	/opt/dell/srvadmin/iSM/sbin/dsm_ism_srvmgrd
 
