@@ -29,12 +29,13 @@ cd "$( dirname "$( readlink -e "${0}" )" )" || exit 1
 
 trace=${TRACE:-}
 
+arg=''
+check=0
 DISTRO='ubuntu'
 docker='docker'
 extra_build_args=''
-check=0
-arg=''
 root=''
+skip=0
 
 if command -v podman >/dev/null 2>&1; then
 	docker='podman'
@@ -43,10 +44,10 @@ fi
 
 [ -d dell ]
 
-while [ -n "${1:-}" ]; do
+while [ -n "${1:-}" ] && [ $(( skip )) -eq 0 ]; do
 	case "${1}" in
 		-h|--help)
-			echo >&2 "Usage: $( basename "${0}" ) [<dsu|ism> [--check|command]]"
+			echo >&2 "Usage: $( basename "${0}" ) [<dsu|ism> [--check|-- <command>]]"
 			exit 0
 			;;
 		-c|--check)
@@ -69,9 +70,10 @@ while [ -n "${1:-}" ]; do
 			shift
 			root="${1:-}"
 			;;
+		--)
+			skip=1
+			;;
 		*)
-			# FIXME: This consumes all arguments, but we want to save arguments
-			#        to DSU (or ISM) and append them later...
 			echo >&2 "FATAL: Unknown option '${1}'"
 			exit 1
 			;;
@@ -135,7 +137,7 @@ UBUNTU='focal'
 CENTOS='8'
 
 #DSU='20.05.00'
-DSU="$( curl -s https://linux.dell.com/repo/hardware/ | grep 'Dell System Update_' | head -n 1 | cut -d'_' -f 2 | cut -d'/' -f 1 )" || exit 1
+DSU="$( curl -s "${HWREPO}/" | grep 'Dell System Update_' | head -n 1 | cut -d'_' -f 2 | cut -d'/' -f 1 )" || exit 1
 
 lsmod | grep -q -- ipmi_devintf || modprobe ipmi_devintf || echo >&2 "WARN: Cannot load IPMI device interface driver"
 lsmod | grep -q -- dcdbas       || modprobe dcdbas       || echo >&2 "WARN: Cannot load Dell Systems Management Base Driver"
@@ -153,6 +155,10 @@ devlog="$( readlink -e /dev/log )"
 
 case "${DISTRO}" in
 	centos)
+		if [ -z "${DSU:-}" ]; then
+			echo >&2 "FATAL: Unable to obtain current DSU release from '${HWREPO}'"
+			exit 1
+		fi
 		if [ $(( check )) -eq 1 ]; then
 			echo "Latest release of Dell iDRAC DSU utilities is v${DSU} for '${DISTRO}' distribution"
 			if ! [ "$( $docker image ls -n "localhost/dell-dsu:${DSU}" | wc -l )" = '1' ]; then
@@ -177,12 +183,13 @@ case "${DISTRO}" in
 			trap - INT
 
 			$docker ${root:+--root "${root}"} image build \
+					--build-arg DSU="${DSU}" \
 					--build-arg OSVER="${CENTOS}" \
 					--build-arg REPO="${HWREPO}" \
-					--build-arg DSU="${DSU}" \
 					--build-arg SET_TERM="${TERM}" \
 					--compress \
 					--file "Dockerfile.${DISTRO}" \
+					--squash-all \
 					--tag "dell-dsu:${DSU}" \
 				.
 					#--network slirp4netns \
@@ -196,6 +203,7 @@ case "${DISTRO}" in
 		$docker container rm -v "dell-dsu-${DSU}" 2>/dev/null || :
 		trap - INT
 
+		# shellcheck disable=SC2046
 		$docker container run \
 				--device /dev/ipmi0:/dev/ipmi0 \
 				--init \
@@ -223,6 +231,14 @@ case "${DISTRO}" in
 		;;
 
 	ubuntu)
+		if [ -z "${ISM:-}" ]; then
+			echo >&2 "FATAL: Unable to obtain current ISM release from '${OMREPO}'"
+			exit 1
+		fi
+		if [ -z "${OSMA:-}" ]; then
+			echo >&2 "FATAL: Unable to obtain current OSMA release from '${OMREPO}'"
+			exit 1
+		fi
 		if [ $(( check )) -eq 1 ]; then
 			echo "Latest release of Dell iDRAC ISM utilities is v${ISM} for '${DISTRO}' distribution"
 			if ! [ "$( $docker image ls -n "localhost/dell-ism:${ISM}" | wc -l )" = '1' ]; then
@@ -248,14 +264,15 @@ case "${DISTRO}" in
 
 			# shellcheck disable=SC2086
 			$docker ${root:+--root "${root}"} image build \
-					  ${extra_build_args} \
+					--build-arg ISM="${ISM}" \
+					--build-arg OSMA="${OSMA}" \
 					--build-arg OSVER="${UBUNTU}" \
 					--build-arg REPO="${OMREPO}" \
-					--build-arg OSMA="${OSMA}" \
-					--build-arg ISM="${ISM}" \
 					--build-arg SET_TERM="${TERM}" \
 					--compress \
 					--file "Dockerfile.${DISTRO}" \
+					  ${extra_build_args} \
+					--squash-all \
 					--tag "dell-ism:${ISM}" \
 				.
 					#--network slirp4netns \
